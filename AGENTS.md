@@ -12,6 +12,9 @@ Import of order statuses from the Magento 2 API back into Volkanos checkout — 
 | `make fix` | auto-fix lint + format |
 | `make test` | test suite (pytest + pytest-django) |
 
+Tests need PostgreSQL: set `DATABASE_URL` (the default in `tests/settings.py` points at a local postgres). The suite
+is an import smoke test (`tests/test_smoke.py`).
+
 ## Conventions
 
 - English only: code, docs, commits, branches, PRs.
@@ -21,12 +24,13 @@ Import of order statuses from the Magento 2 API back into Volkanos checkout — 
 - Never rename the package / Django app_label / DB table prefix `django_checkout_import_from_magento_api` — it is a schema contract.
 - Migrations are part of the public contract — never edit an already released migration.
 - Default: do not commit — git is the user's call.
+- No AI attribution in commits or PR descriptions.
 
 ## Architecture
 
 ```
 src/django_checkout_import_from_magento_api/
-├── apps.py                 # AppConfig (is_volkanos=True)
+├── apps.py                 # AppConfig
 ├── settings.py             # host-overridable settings (Magento URL/token via getattr)
 ├── models.py               # StatusFromMagento (OneToOne → django_checkout.Order, attempts counter)
 ├── repository.py           # order lookups (by pk / order_id / pretty_id)
@@ -39,15 +43,15 @@ src/django_checkout_import_from_magento_api/
 
 `StatusFromMagento` keeps one row per checkout order: the Magento response, success flag and the
 number of import attempts. Orders are updated only when the Magento status is ON_HOLD, CANCELED
-or COMPLETE.
+or COMPLETE; a PROCESSING order becomes `confirmed` once Magento holds an invoice for it.
 
-## Dependencies
+Runtime: Python >=3.11, Django >=5.0, `django_checkout`, SDK `magento2_sdk`, `bievents`.
+What each is used for: README, section Requirements.
 
-| Module | Purpose |
+| Topic | Where |
 |---|---|
-| `django_checkout` | Order (OneToOne FK + status updates) |
-| `magento2_sdk` | Magento 2 REST client (orders, invoices) |
-| `bievents` | BI command decorators + events |
+| Management command reference (outdated command and option names; `add_arguments` of each command is authoritative) | `docs/commands/` |
+| Process logging setup for the host service | `docs/process-logging.md` |
 
 ## Settings
 
@@ -55,17 +59,4 @@ or COMPLETE.
 |---|---|---|
 | `MAGENTO2_URL_FOR_CHECKOUT_EXPORT` | `None` | Magento REST base URL (shared with the export module) |
 | `MAGENTO2_TOKEN_FOR_CHECKOUT_EXPORT` | `None` | Magento API token (shared with the export module) |
-
-## Testing
-
-```bash
-# Postgres required; tests/settings.py reads DATABASE_URL
-# (default postgresql://postgres:postgres@localhost:5432/test).
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test make test
-```
-
-Test suite is an import smoke test (`tests/test_smoke.py`) — real importer tests are an open TODO.
-
-## References
-
-- `docs/commands/` — management command reference (parameters, examples).
+| `BI_ENVIRONMENT`, `BI_BUSINESS_UNIT` | none (required) | BI event labels, read by `bi.py` at import time |
